@@ -40,10 +40,7 @@ class DeviceController extends _$DeviceController {
       // Use IPAddress class from wake_on_lan (exported via wake_on_lan.dart)
       final ipv4 = IPAddress('255.255.255.255');
       await WakeOnLAN(ipv4, mac, port: device.port).wake();
-      print("Sent WoL packet to ${device.macAddress}");
-    } else {
-       print("Invalid MAC Address: ${device.macAddress}");
-    }
+    } else {}
   }
 
   Future<void> wakeAllDevices() async {

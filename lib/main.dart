@@ -37,7 +37,6 @@ void main() async {
 
     if (Platform.isMacOS) {
       await windowManager.setPreventClose(true);
-      print('Main: setPreventClose(true) called');
     }
   }
 

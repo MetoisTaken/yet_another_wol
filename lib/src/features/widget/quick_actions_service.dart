@@ -9,23 +9,23 @@ part 'quick_actions_service.g.dart';
 class QuickActionsService extends _$QuickActionsService {
   @override
   void build() {
-    final quickActions = const QuickActions();
-    
+    const quickActions = QuickActions();
+
     if (Platform.isAndroid || Platform.isIOS) {
       quickActions.initialize((shortcutType) {
-      if (shortcutType == 'wake_all') {
-        ref.read(deviceControllerProvider.notifier).wakeAllDevices();
-      } else if (shortcutType.startsWith('device_')) {
-        final deviceId = shortcutType.substring(7);
-        final devices = ref.read(deviceControllerProvider);
-        try {
-          final device = devices.firstWhere((d) => d.id == deviceId);
-          ref.read(deviceControllerProvider.notifier).wakeDevice(device);
-        } catch (_) {
-          // Device might have been deleted
+        if (shortcutType == 'wake_all') {
+          ref.read(deviceControllerProvider.notifier).wakeAllDevices();
+        } else if (shortcutType.startsWith('device_')) {
+          final deviceId = shortcutType.substring(7);
+          final devices = ref.read(deviceControllerProvider);
+          try {
+            final device = devices.firstWhere((d) => d.id == deviceId);
+            ref.read(deviceControllerProvider.notifier).wakeDevice(device);
+          } catch (_) {
+            // Device might have been deleted
+          }
         }
-      }
-    });
+      });
     }
 
     ref.listen(deviceControllerProvider, (previous, next) {
@@ -35,7 +35,7 @@ class QuickActionsService extends _$QuickActionsService {
 
   Future<void> updateShortcuts() async {
     final devices = ref.read(deviceControllerProvider);
-    final quickActions = const QuickActions();
+    const quickActions = QuickActions();
 
     List<ShortcutItem> items = [
       const ShortcutItem(
@@ -48,11 +48,13 @@ class QuickActionsService extends _$QuickActionsService {
     // Add first 3 devices as shortcuts
     for (var i = 0; i < devices.length && i < 3; i++) {
       final device = devices[i];
-      items.add(ShortcutItem(
-        type: 'device_${device.id}',
-        localizedTitle: device.alias,
-        icon: 'action_device', // Needs asset
-      ));
+      items.add(
+        ShortcutItem(
+          type: 'device_${device.id}',
+          localizedTitle: device.alias,
+          icon: 'action_device', // Needs asset
+        ),
+      );
     }
 
     if (Platform.isAndroid || Platform.isIOS) {

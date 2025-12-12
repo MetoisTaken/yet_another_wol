@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'package:flutter/material.dart';
+
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:yet_another_wol/src/core/services/notification_service.dart';
@@ -17,18 +17,14 @@ class WindowService extends _$WindowService with WindowListener {
 
   @override
   void onWindowClose() async {
-    print('WindowService: onWindowClose called');
     if (Platform.isMacOS) {
       bool isPreventClose = await windowManager.isPreventClose();
-      print('WindowService: isPreventClose: $isPreventClose');
       if (isPreventClose) {
-        print('WindowService: Hiding window');
         await windowManager.hide();
         await ref
             .read(notificationServiceProvider.notifier)
             .showBackgroundModeNotification();
       } else {
-        print('WindowService: Not preventing close, closing window');
         await windowManager.close();
       }
     } else {

@@ -6,7 +6,7 @@ part of 'widget_service.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$widgetServiceHash() => r'6cbcee9ba0a0c3bf3ea66f82f5bbb3845ed199c7';
+String _$widgetServiceHash() => r'e76df5adefe1bafdc784862fa311fec75aeaf3a7';
 
 /// See also [WidgetService].
 @ProviderFor(WidgetService)
