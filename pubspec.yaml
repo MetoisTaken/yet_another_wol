@@ -1,0 +1,66 @@
+name: yet_another_wol
+description: "Yet Another Wake on LAN (YAWoL)"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.3
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # State Management (Pinned to V2 Stable)
+  flutter_riverpod: ^2.5.1
+  riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Architecture & Routing
+  go_router: 
+  
+  # Data & Storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  uuid: ^4.2.1
+  equatable: ^2.0.5
+
+  # UI & Assets
+  google_fonts: 
+  flex_color_scheme: 
+  cupertino_icons: ^1.0.8
+
+  # Networking & WoL
+  wake_on_lan: 
+  network_tools: 
+  network_info_plus: 
+  dart_ping: 
+  dart_ping_ios: 
+
+  # Platform Integration
+  permission_handler: 
+  window_manager: 
+  home_widget: 
+  quick_actions: 
+  workmanager: 
+  tray_manager: 
+  path_provider: ^2.1.2 
+  sqlite3_flutter_libs: ^0.5.0 
+  flutter_local_notifications: ^19.5.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  
+  flutter_lints: ^3.0.0
+  build_runner: 
+  riverpod_generator: ^2.4.0
+  hive_generator: 
+  custom_lint: 
+  riverpod_lint: 
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - images/
