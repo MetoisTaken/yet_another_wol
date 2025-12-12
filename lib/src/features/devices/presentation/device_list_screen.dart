@@ -23,6 +23,7 @@ class DeviceListScreen extends ConsumerWidget {
             icon: const Icon(Icons.star, color: Colors.amber),
             onPressed: () {
               ref.read(deviceControllerProvider.notifier).wakeFavoriteDevices();
+              ScaffoldMessenger.of(context).clearSnackBars();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Waking favorite devices...')),
               );
@@ -33,6 +34,7 @@ class DeviceListScreen extends ConsumerWidget {
             icon: const Icon(Icons.bolt, color: Colors.orange),
             onPressed: () {
               ref.read(deviceControllerProvider.notifier).wakeAllDevices();
+              ScaffoldMessenger.of(context).clearSnackBars();
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Waking all devices...')),
               );
@@ -119,6 +121,7 @@ class DeviceListScreen extends ConsumerWidget {
                         ref
                             .read(deviceControllerProvider.notifier)
                             .wakeDevice(device);
+                        ScaffoldMessenger.of(context).clearSnackBars();
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
@@ -181,6 +184,7 @@ class DeviceListScreen extends ConsumerWidget {
                                   .toggleFavorite(device);
 
                               if (!success && context.mounted) {
+                                ScaffoldMessenger.of(context).clearSnackBars();
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
                                     content: Text(
@@ -199,6 +203,7 @@ class DeviceListScreen extends ConsumerWidget {
                               ref
                                   .read(deviceControllerProvider.notifier)
                                   .wakeDevice(device);
+                              ScaffoldMessenger.of(context).clearSnackBars();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text(

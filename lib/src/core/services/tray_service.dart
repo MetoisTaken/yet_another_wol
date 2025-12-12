@@ -14,7 +14,7 @@ class TrayService extends _$TrayService with TrayListener {
     ref.listen(deviceControllerProvider, (previous, next) {
       updateContextMenu();
     });
-    
+
     // Initial setup if desktop
     if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
       _init();
@@ -24,7 +24,7 @@ class TrayService extends _$TrayService with TrayListener {
   Future<void> _init() async {
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
 
-     await trayManager.setIcon(
+    await trayManager.setIcon(
       Platform.isWindows ? 'images/tray_icon.ico' : 'images/tray_icon.png',
     );
     trayManager.addListener(this);
@@ -33,34 +33,25 @@ class TrayService extends _$TrayService with TrayListener {
 
   Future<void> updateContextMenu() async {
     if (!Platform.isWindows && !Platform.isMacOS && !Platform.isLinux) return;
-    
+
     final devices = ref.read(deviceControllerProvider);
-    
+
     List<MenuItem> items = [
-      MenuItem(
-        key: 'wake_all',
-        label: 'Wake All Devices',
-      ),
+      MenuItem(key: 'wake_all', label: 'Wake All Devices'),
+      MenuItem(key: 'wake_favorites', label: 'Wake Favorite Devices'),
       MenuItem.separator(),
     ];
 
     for (var device in devices) {
-      items.add(MenuItem(
-        key: 'device_${device.id}',
-        label: 'Wake ${device.alias}',
-      ));
+      items.add(
+        MenuItem(key: 'device_${device.id}', label: 'Wake ${device.alias}'),
+      );
     }
 
     items.addAll([
       MenuItem.separator(),
-      MenuItem(
-        key: 'show',
-        label: 'Show App',
-      ),
-      MenuItem(
-        key: 'exit',
-        label: 'Exit',
-      ),
+      MenuItem(key: 'show', label: 'Show App'),
+      MenuItem(key: 'exit', label: 'Exit'),
     ]);
 
     await trayManager.setContextMenu(Menu(items: items));
@@ -80,6 +71,8 @@ class TrayService extends _$TrayService with TrayListener {
   void onTrayMenuItemClick(MenuItem menuItem) {
     if (menuItem.key == 'wake_all') {
       ref.read(deviceControllerProvider.notifier).wakeAllDevices();
+    } else if (menuItem.key == 'wake_favorites') {
+      ref.read(deviceControllerProvider.notifier).wakeFavoriteDevices();
     } else if (menuItem.key == 'show') {
       windowManager.show();
     } else if (menuItem.key == 'exit') {
