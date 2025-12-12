@@ -21,7 +21,10 @@ class Device extends HiveObject {
   final int port;
 
   @HiveField(5)
-  bool isOnline; // Runtime status, might not want to persist but keeping it simple
+  bool isOnline;
+
+  @HiveField(6, defaultValue: false)
+  final bool isFavorite;
 
   Device({
     String? id,
@@ -30,6 +33,7 @@ class Device extends HiveObject {
     required this.alias,
     this.port = 9,
     this.isOnline = false,
+    this.isFavorite = false,
   }) : id = id ?? const Uuid().v4();
 
   Device copyWith({
@@ -38,6 +42,7 @@ class Device extends HiveObject {
     String? alias,
     int? port,
     bool? isOnline,
+    bool? isFavorite,
   }) {
     return Device(
       id: id,
@@ -46,6 +51,7 @@ class Device extends HiveObject {
       alias: alias ?? this.alias,
       port: port ?? this.port,
       isOnline: isOnline ?? this.isOnline,
+      isFavorite: isFavorite ?? this.isFavorite,
     );
   }
 }

@@ -7,8 +7,22 @@ import 'package:window_manager/window_manager.dart';
 import 'package:yet_another_wol/src/app.dart';
 import 'package:yet_another_wol/src/features/devices/data/device_repository.dart';
 
+import 'package:home_widget/home_widget.dart';
+import 'package:yet_another_wol/src/features/widget/background_widget_handler.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (Platform.isIOS || Platform.isAndroid) {
+    try {
+      if (Platform.isIOS) {
+        await HomeWidget.setAppGroupId('group.com.metehan.yet_another_wol');
+      }
+      HomeWidget.registerBackgroundCallback(backgroundCallback);
+    } catch (e) {
+      debugPrint("Error initializing HomeWidget: $e");
+    }
+  }
 
   if (Platform.isIOS) {
     DartPingIOS.register();

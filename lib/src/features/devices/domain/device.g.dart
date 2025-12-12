@@ -23,13 +23,14 @@ class DeviceAdapter extends TypeAdapter<Device> {
       alias: fields[3] as String,
       port: fields[4] as int,
       isOnline: fields[5] as bool,
+      isFavorite: fields[6] == null ? false : fields[6] as bool,
     );
   }
 
   @override
   void write(BinaryWriter writer, Device obj) {
     writer
-      ..writeByte(6)
+      ..writeByte(7)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -41,7 +42,9 @@ class DeviceAdapter extends TypeAdapter<Device> {
       ..writeByte(4)
       ..write(obj.port)
       ..writeByte(5)
-      ..write(obj.isOnline);
+      ..write(obj.isOnline)
+      ..writeByte(6)
+      ..write(obj.isFavorite);
   }
 
   @override

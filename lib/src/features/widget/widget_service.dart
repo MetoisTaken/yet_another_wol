@@ -3,20 +3,16 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:yet_another_wol/src/features/devices/presentation/device_controller.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'package:yet_another_wol/src/features/devices/domain/device.dart';
 
 part 'widget_service.g.dart';
 
-const String? kAppGroupId = null; // Set this if you have an App Group ID
+const String kAppGroupId = 'group.com.metehan.yet_another_wol';
 
 @Riverpod(keepAlive: true)
 class WidgetService extends _$WidgetService {
   @override
   void build() {
-    // Initialize HomeWidget with App Group ID if available
-    if (kAppGroupId != null) {
-      HomeWidget.setAppGroupId(kAppGroupId!);
-    }
-
     ref.listen(deviceControllerProvider, (previous, next) {
       updateWidgetData();
     });
@@ -30,9 +26,27 @@ class WidgetService extends _$WidgetService {
     // For complex lists, we might need store data as a JSON string
     // and parse it on the native side (Kotlin/Swift).
 
+    // Filter Favorites
+    final favoriteDevices = devices.where((d) => d.isFavorite).toList();
+
+    // Prepare list for widget
+    List<Device> devicesToSync = favoriteDevices;
+
+    if (Platform.isIOS) {
+      // iOS Limit: Max 2
+      devicesToSync = favoriteDevices.take(2).toList();
+    }
+
     final devicesJson = jsonEncode(
-      devices
-          .map((d) => {'id': d.id, 'alias': d.alias, 'mac': d.macAddress})
+      devicesToSync
+          .map(
+            (d) => {
+              'id': d.id,
+              'alias': d.alias,
+              'mac': d.macAddress,
+              'port': d.port,
+            },
+          )
           .toList(),
     );
 

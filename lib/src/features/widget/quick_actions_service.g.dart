@@ -7,7 +7,7 @@ part of 'quick_actions_service.dart';
 // **************************************************************************
 
 String _$quickActionsServiceHash() =>
-    r'f03e45bef331ba19520e6d368c976c0ba4ff8272';
+    r'62080c50aa1113b03e9caf8dd3a69941127d3939';
 
 /// See also [QuickActionsService].
 @ProviderFor(QuickActionsService)

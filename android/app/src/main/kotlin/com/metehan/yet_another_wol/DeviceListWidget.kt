@@ -5,23 +5,33 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.widget.RemoteViews
 import es.antonborri.home_widget.HomeWidgetProvider
+import android.content.Intent
+import es.antonborri.home_widget.HomeWidgetBackgroundIntent
+import android.app.PendingIntent
+import android.net.Uri
 
 class DeviceListWidget : HomeWidgetProvider() {
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray, widgetData: SharedPreferences) {
         appWidgetIds.forEach { widgetId ->
-            val views = RemoteViews(context.packageName, R.layout.widget_layout).apply {
-                // Determine what to show.
-                // The Flutter side saves a JSON string under 'devices_data' key.
-                val devicesJson = widgetData.getString("devices_data", null)
-                val textToShow = if (devicesJson != null) {
-                   "Tap to open app" // Placeholder for now, later we can parse JSON
-                } else {
-                   "No data"
-                }
+            val views = RemoteViews(context.packageName, R.layout.widget_layout)
+            
+            // Set up the collection
+            val serviceIntent = Intent(context, DeviceListWidgetService::class.java)
+            serviceIntent.putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, widgetId)
+            serviceIntent.data = Uri.parse(serviceIntent.toUri(Intent.URI_INTENT_SCHEME))
+            
+            views.setRemoteAdapter(R.id.device_list_view, serviceIntent)
+            views.setEmptyView(R.id.device_list_view, R.id.empty_view)
 
-                setTextViewText(R.id.widget_title, textToShow)
-            }
+            // Set up the pending intent template for items
+            val pendingIntent = HomeWidgetBackgroundIntent.getBroadcast(
+                context,
+                Uri.parse("wol://wake")
+            )
+            views.setPendingIntentTemplate(R.id.device_list_view, pendingIntent)
+
             appWidgetManager.updateAppWidget(widgetId, views)
+            appWidgetManager.notifyAppWidgetViewDataChanged(widgetId, R.id.device_list_view)
         }
     }
 }

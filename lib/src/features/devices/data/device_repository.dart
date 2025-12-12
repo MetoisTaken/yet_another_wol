@@ -38,6 +38,16 @@ class DeviceRepository {
   Future<void> deleteDevice(String id) async {
     await _box.delete(id);
   }
-  
-  // Future<void> saveDevices(List<Device> devices) async { ... } // Bulk if needed
+
+  Future<void> deleteFavoriteDevices() async {
+    final favorites = _box.values
+        .where((d) => d.isFavorite)
+        .map((d) => d.id)
+        .toList();
+    await _box.deleteAll(favorites);
+  }
+
+  Future<void> deleteAllDevices() async {
+    await _box.clear();
+  }
 }

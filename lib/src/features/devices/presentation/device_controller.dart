@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:yet_another_wol/src/features/devices/data/device_repository.dart';
 import 'package:yet_another_wol/src/features/devices/domain/device.dart';
@@ -29,6 +30,33 @@ class DeviceController extends _$DeviceController {
     state = ref.read(deviceRepositoryProvider).getAllDevices();
   }
 
+  Future<bool> toggleFavorite(Device device) async {
+    // If we are about to favorite it (currently false)
+    if (!device.isFavorite) {
+      if (Platform.isIOS) {
+        final currentFavoritesCount = state.where((d) => d.isFavorite).length;
+        if (currentFavoritesCount >= 2) {
+          return false; // Valid limit reached
+        }
+      }
+    }
+
+    final updated = device.copyWith(isFavorite: !device.isFavorite);
+    await ref.read(deviceRepositoryProvider).updateDevice(updated);
+    state = ref.read(deviceRepositoryProvider).getAllDevices();
+    return true;
+  }
+
+  Future<void> deleteFavoriteDevices() async {
+    await ref.read(deviceRepositoryProvider).deleteFavoriteDevices();
+    state = ref.read(deviceRepositoryProvider).getAllDevices();
+  }
+
+  Future<void> deleteAllDevices() async {
+    await ref.read(deviceRepositoryProvider).deleteAllDevices();
+    state = ref.read(deviceRepositoryProvider).getAllDevices();
+  }
+
   Future<void> wakeDevice(Device device) async {
     // Send WoL packet
     // MAC address format: XX:XX:XX:XX:XX:XX
@@ -45,6 +73,13 @@ class DeviceController extends _$DeviceController {
 
   Future<void> wakeAllDevices() async {
     for (var device in state) {
+      await wakeDevice(device);
+    }
+  }
+
+  Future<void> wakeFavoriteDevices() async {
+    final favorites = state.where((d) => d.isFavorite);
+    for (var device in favorites) {
       await wakeDevice(device);
     }
   }
