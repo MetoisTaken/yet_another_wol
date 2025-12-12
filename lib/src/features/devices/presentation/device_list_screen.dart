@@ -16,7 +16,30 @@ class DeviceListScreen extends ConsumerWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Yet Another WoL'),
+        title: LayoutBuilder(
+          builder: (context, constraints) {
+            // Use titleLarge which is the default for AppBar, or fallback to 22 which is standard.
+            final style =
+                Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w500) ??
+                const TextStyle(fontSize: 22, fontWeight: FontWeight.w500);
+
+            final textPainter = TextPainter(
+              text: TextSpan(text: 'Yet Another WoL', style: style),
+              textDirection: TextDirection.ltr,
+              maxLines: 1,
+            );
+            textPainter.layout(maxWidth: double.infinity);
+
+            // Add a small buffer (e.g. 10 pixels) to account for rendering differences
+            // or subtle padding issues.
+            if (textPainter.width + 10 > constraints.maxWidth) {
+              return const Text('YAWoL');
+            }
+            return const Text('Yet Another WoL');
+          },
+        ),
         actions: [
           IconButton(
             tooltip: "Wake Favorites",
