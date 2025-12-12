@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:network_tools/network_tools.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:network_info_plus/network_info_plus.dart';
@@ -46,10 +47,30 @@ class ScannerController extends _$ScannerController {
       await _ensureNetworkToolsInitialized();
       
       final info = NetworkInfo();
-      final wifiIp = await info.getWifiIP();
+      String? wifiIp = await info.getWifiIP();
+      
+      // Fallback for desktop or Ethernet connections
+      if (wifiIp == null && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+         try {
+           final interfaces = await NetworkInterface.list(type: InternetAddressType.IPv4);
+           for (var interface in interfaces) {
+             // Skip likely virtual interfaces if possible?
+             // Simple heuristic: pick first non-loopback non-link-local
+             for (var addr in interface.addresses) {
+               if (!addr.isLoopback && !addr.isLinkLocal) {
+                 wifiIp = addr.address;
+                 break;
+               }
+             }
+             if (wifiIp != null) break;
+           }
+         } catch (e) {
+           // ignore error, will fail via null check below
+         }
+      }
       
       if (wifiIp == null) {
-        state = AsyncValue.error('No WiFi connection', StackTrace.current);
+        state = AsyncValue.error('No Network connection', StackTrace.current);
         return;
       }
 

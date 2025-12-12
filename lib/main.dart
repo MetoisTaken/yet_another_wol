@@ -49,7 +49,7 @@ void main() async {
       await windowManager.focus();
     });
 
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isWindows) {
       await windowManager.setPreventClose(true);
     }
   }

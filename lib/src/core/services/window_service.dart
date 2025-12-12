@@ -17,7 +17,7 @@ class WindowService extends _$WindowService with WindowListener {
 
   @override
   void onWindowClose() async {
-    if (Platform.isMacOS) {
+    if (Platform.isMacOS || Platform.isWindows) {
       bool isPreventClose = await windowManager.isPreventClose();
       if (isPreventClose) {
         await windowManager.hide();
