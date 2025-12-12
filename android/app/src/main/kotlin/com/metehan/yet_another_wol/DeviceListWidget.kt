@@ -24,9 +24,15 @@ class DeviceListWidget : HomeWidgetProvider() {
             views.setEmptyView(R.id.device_list_view, R.id.empty_view)
 
             // Set up the pending intent template for items
-            val pendingIntent = HomeWidgetBackgroundIntent.getBroadcast(
+            // Set up the pending intent template for items
+            val backgroundIntent = Intent(context, es.antonborri.home_widget.HomeWidgetBackgroundReceiver::class.java)
+            backgroundIntent.action = "es.antonborri.home_widget.action.BACKGROUND"
+
+            val pendingIntent = PendingIntent.getBroadcast(
                 context,
-                Uri.parse("wol://wake")
+                0,
+                backgroundIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
             )
             views.setPendingIntentTemplate(R.id.device_list_view, pendingIntent)
 
