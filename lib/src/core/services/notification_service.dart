@@ -25,15 +25,27 @@ class NotificationService extends _$NotificationService {
           requestSoundPermission: false,
         );
 
-    const InitializationSettings initializationSettings =
+    const LinuxInitializationSettings initializationSettingsLinux =
+        LinuxInitializationSettings(
+      defaultActionName: 'Open notification',
+    );
+    
+    // Windows settings match Linux closely in some versions but have their own class now
+    const WindowsInitializationSettings initializationSettingsWindows = 
+        WindowsInitializationSettings(
+      appName: 'Yet Another WoL',
+      guid: 'd2c18006-238d-42cc-9b6c-2e650c82245f', // Generated UUID
+      appUserModelId: 'com.metehan.yet_another_wol',
+    );
+
+    final InitializationSettings initializationSettings =
         InitializationSettings(
-          android: initializationSettingsAndroid,
-          iOS: initializationSettingsDarwin,
-          macOS: initializationSettingsDarwin,
-          linux: LinuxInitializationSettings(
-            defaultActionName: 'Open notification',
-          ),
-        );
+      android: initializationSettingsAndroid,
+      iOS: initializationSettingsDarwin,
+      macOS: initializationSettingsDarwin,
+      linux: initializationSettingsLinux,
+      windows: initializationSettingsWindows,
+    );
 
     // Initial permission request for macOS
     if (Platform.isMacOS) {
@@ -53,14 +65,19 @@ class NotificationService extends _$NotificationService {
   }
 
   Future<void> showBackgroundModeNotification() async {
-    if (!Platform.isMacOS) return;
+    if (!Platform.isMacOS && !Platform.isWindows) return;
 
     const DarwinNotificationDetails macOSDetails = DarwinNotificationDetails(
       presentSound: false,
     );
 
+    const LinuxNotificationDetails linuxDetails = LinuxNotificationDetails(
+      defaultActionName: 'Open',
+    );
+
     const NotificationDetails notificationDetails = NotificationDetails(
       macOS: macOSDetails,
+      linux: linuxDetails, 
     );
 
     await _notificationsPlugin.show(
