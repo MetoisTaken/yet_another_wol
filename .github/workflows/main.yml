@@ -1,0 +1,764 @@
+name: CI
+
+on:
+  pull_request:
+    branches: ["main"]
+  push:
+    tags:
+      - 'v*.*.*'  # Only trigger on version tags
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+
+
+jobs:
+  # -------------------------
+  # CHECK (bilgilendirici, fail etmez)
+  # -------------------------
+  check:
+    name: check
+    runs-on: [self-hosted, macOS, X64]
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: set caches (workspace)
+        shell: bash
+        run: |
+          echo "PUB_CACHE=${GITHUB_WORKSPACE}/.pub-cache" >> $GITHUB_ENV
+          echo "GRADLE_USER_HOME=${GITHUB_WORKSPACE}/.gradle" >> $GITHUB_ENV
+
+      - name: flutter (mac)
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: pub get (non-fatal)
+        continue-on-error: true
+        shell: bash
+        run: flutter pub get --enforce-lockfile
+
+      - name: codegen (non-fatal)
+        continue-on-error: true
+        shell: bash
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: format (non-fatal)
+        shell: bash
+        run: |
+          set +e
+          dart format --output=none --set-exit-if-changed .
+          if [ $? -ne 0 ]; then
+            echo "::warning::dart format would change files. Run locally: dart format ."
+          fi
+          exit 0
+
+      - name: analyze (non-fatal)
+        shell: bash
+        run: |
+          set +e
+          flutter analyze
+          if [ $? -ne 0 ]; then
+            echo "::warning::flutter analyze found issues"
+          fi
+          exit 0
+
+      - name: lint (non-fatal)
+        shell: bash
+        run: |
+          set +e
+          dart run custom_lint
+          if [ $? -ne 0 ]; then
+            echo "::warning::custom_lint found issues"
+          fi
+          exit 0
+
+      - name: test (skip if missing; non-fatal)
+        shell: bash
+        run: |
+          if [ ! -d test ]; then
+            echo "::notice::No test/ directory -> skipping flutter test"
+            exit 0
+          fi
+          set +e
+          flutter test
+          if [ $? -ne 0 ]; then
+            echo "::warning::flutter test failed"
+          fi
+          exit 0
+
+  # -------------------------
+  # BUILD (build olursa geçsin, olmazsa geçmesin)
+  # -------------------------
+  build:
+    name: build (${{ matrix.platform }})
+    needs: check
+    if: github.event_name != 'pull_request'
+    runs-on: ${{ fromJSON(matrix.runs_on) }}
+    timeout-minutes: 240
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        include:
+          - platform: android
+            runs_on: '["self-hosted","macOS","X64"]'
+          - platform: ios
+            runs_on: '["self-hosted","macOS","X64"]'
+          - platform: macos
+            runs_on: '["self-hosted","macOS","X64"]'
+          - platform: windows
+            runs_on: '["self-hosted","Windows","X64"]'
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+
+      # ---- CACHES: workspace içine ----
+      - name: set caches (mac)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          echo "PUB_CACHE=${GITHUB_WORKSPACE}/.pub-cache" >> $GITHUB_ENV
+          echo "GRADLE_USER_HOME=${GITHUB_WORKSPACE}/.gradle" >> $GITHUB_ENV
+
+      - name: set caches (win) (NO ps1)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          echo PUB_CACHE=%GITHUB_WORKSPACE%\.pub-cache>>"%GITHUB_ENV%"
+          echo GRADLE_USER_HOME=%GITHUB_WORKSPACE%\.gradle>>"%GITHUB_ENV%"
+
+      # ---- FLUTTER SETUP ----
+      - name: flutter (mac)
+        if: runner.os != 'Windows'
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: false
+
+      - name: flutter (win local install)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          REM Try multiple common Flutter locations
+          
+          REM 1. Try FLUTTER_ROOT env var
+          if not "%FLUTTER_ROOT%"=="" (
+            if exist "%FLUTTER_ROOT%\bin\flutter.bat" (
+              echo Found Flutter via FLUTTER_ROOT
+              echo %FLUTTER_ROOT%\bin>>"%GITHUB_PATH%"
+              "%FLUTTER_ROOT%\bin\flutter.bat" --version
+              "%FLUTTER_ROOT%\bin\flutter.bat" config --enable-windows-desktop
+              exit /b 0
+            )
+          )
+          
+          REM 2. Try C:\src\flutter
+          if exist "C:\src\flutter\bin\flutter.bat" (
+            echo Found Flutter at C:\src\flutter
+            echo C:\src\flutter\bin>>"%GITHUB_PATH%"
+            "C:\src\flutter\bin\flutter.bat" --version
+            "C:\src\flutter\bin\flutter.bat" config --enable-windows-desktop
+            exit /b 0
+          )
+          
+          REM 3. Try C:\flutter
+          if exist "C:\flutter\bin\flutter.bat" (
+            echo Found Flutter at C:\flutter
+            echo C:\flutter\bin>>"%GITHUB_PATH%"
+            "C:\flutter\bin\flutter.bat" --version
+            "C:\flutter\bin\flutter.bat" config --enable-windows-desktop
+            exit /b 0
+          )
+          
+          REM 4. Try user profile
+          if exist "%USERPROFILE%\flutter\bin\flutter.bat" (
+            echo Found Flutter at %USERPROFILE%\flutter
+            echo %USERPROFILE%\flutter\bin>>"%GITHUB_PATH%"
+            "%USERPROFILE%\flutter\bin\flutter.bat" --version
+            "%USERPROFILE%\flutter\bin\flutter.bat" config --enable-windows-desktop
+            exit /b 0
+          )
+          
+          REM 5. Try C:\tools\flutter
+          if exist "C:\tools\flutter\bin\flutter.bat" (
+            echo Found Flutter at C:\tools\flutter
+            echo C:\tools\flutter\bin>>"%GITHUB_PATH%"
+            "C:\tools\flutter\bin\flutter.bat" --version
+            "C:\tools\flutter\bin\flutter.bat" config --enable-windows-desktop
+            exit /b 0
+          )
+          
+          REM Not found
+          echo ::error::Flutter not found. Tried locations:
+          echo ::error::  - %%FLUTTER_ROOT%% (not set or invalid)
+          echo ::error::  - C:\src\flutter
+          echo ::error::  - C:\flutter
+          echo ::error::  - %USERPROFILE%\flutter
+          echo ::error::  - C:\tools\flutter
+          exit /b 1
+
+      # ---- PUB GET / CODEGEN ----
+      - name: pub get (mac)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: flutter pub get --enforce-lockfile
+
+      - name: pub get (win)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: flutter pub get --enforce-lockfile
+
+      - name: codegen (mac)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      - name: codegen (win)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # ---- BUILD TAG ----
+      - name: tag (mac)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          APP_NAME=$(grep -E '^\s*name:\s*' pubspec.yaml | head -n1 | awk '{print $2}' | tr -d "\"'" )
+          APP_VERSION=$(grep -E '^\s*version:\s*' pubspec.yaml | head -n1 | awk '{print $2}' | tr -d "\"'" )
+          APP_NAME=${APP_NAME:-app}
+          APP_VERSION=${APP_VERSION:-0.0.0+0}
+          APP_VERSION_SAFE="${APP_VERSION//+/_}"
+          SHA7=${GITHUB_SHA::7}
+          echo "BUILD_TAG=${APP_NAME}-${APP_VERSION_SAFE}-${SHA7}" >> $GITHUB_ENV
+
+      - name: tag (win) (NO ps1; use -Command)
+        if: runner.os == 'Windows'
+        shell: cmd
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -Command "$pub=Get-Content pubspec.yaml -Raw; $name=([regex]::Match($pub,'^\s*name:\s*(.+)\s*$','Multiline')).Groups[1].Value.Trim().Trim('""').Trim(''''); $ver=([regex]::Match($pub,'^\s*version:\s*(.+)\s*$','Multiline')).Groups[1].Value.Trim().Trim('""').Trim(''''); if([string]::IsNullOrWhiteSpace($name)){$name='app'}; if([string]::IsNullOrWhiteSpace($ver)){$ver='0.0.0+0'}; $verSafe=$ver.Replace('+','_'); $sha7=$env:GITHUB_SHA.Substring(0,7); Add-Content -Path $env:GITHUB_ENV -Value ('BUILD_TAG=' + $name + '-' + $verSafe + '-' + $sha7)"
+
+      # ================= ANDROID (macOS runner) =================
+      - name: java17
+        if: matrix.platform == 'android'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: android sdk (best-effort)
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          if [ -z "${ANDROID_SDK_ROOT:-}" ] && [ -d "$HOME/Library/Android/sdk" ]; then
+            echo "ANDROID_SDK_ROOT=$HOME/Library/Android/sdk" >> $GITHUB_ENV
+            echo "ANDROID_HOME=$HOME/Library/Android/sdk" >> $GITHUB_ENV
+            echo "$HOME/Library/Android/sdk/platform-tools" >> $GITHUB_PATH
+            if [ -d "$HOME/Library/Android/sdk/cmdline-tools/latest/bin" ]; then
+              echo "$HOME/Library/Android/sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+            fi
+          fi
+          which adb || true
+          adb version || true
+
+      - name: android signing (secrets or local required)
+        if: matrix.platform == 'android'
+        shell: bash
+        env:
+          KS_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -e
+          mkdir -p android/app
+
+          if [[ -n "${KS_B64:-}" && -n "${KS_PASS:-}" && -n "${KEY_ALIAS:-}" && -n "${KEY_PASS:-}" ]]; then
+            python3 -c "import os,base64; open('android/app/upload-keystore.jks','wb').write(base64.b64decode(os.environ['KS_B64']))"
+            printf "storePassword=%s\nkeyPassword=%s\nkeyAlias=%s\nstoreFile=upload-keystore.jks\n" \
+              "$KS_PASS" "$KEY_PASS" "$KEY_ALIAS" > android/key.properties
+          else
+            test -f android/key.properties || (echo "::error::android/key.properties missing" && exit 1)
+            STORE_FILE=$(grep -E '^storeFile=' android/key.properties | cut -d'=' -f2 | tr -d '\r')
+            test -n "$STORE_FILE" || (echo "::error::storeFile not set in android/key.properties" && exit 1)
+            test -f "android/app/$STORE_FILE" || (echo "::error::Keystore not found: android/app/$STORE_FILE" && exit 1)
+          fi
+
+      - name: build android (strict)
+        if: matrix.platform == 'android'
+        shell: bash
+        env:
+          GRADLE_OPTS: -Dorg.gradle.vfs.watch=false
+        run: |
+          flutter build apk --release --no-pub
+          flutter build appbundle --release --no-pub
+
+      - name: pack android (strict)
+        if: matrix.platform == 'android'
+        shell: bash
+        run: |
+          mkdir -p dist
+          test -f build/app/outputs/flutter-apk/app-release.apk
+          test -f build/app/outputs/bundle/release/app-release.aab
+          cp build/app/outputs/flutter-apk/app-release.apk "dist/${BUILD_TAG}-android-release.apk"
+          cp build/app/outputs/bundle/release/app-release.aab "dist/${BUILD_TAG}-android-release.aab"
+
+      # ================= iOS =================
+      - name: ios signing setup (optional)
+        if: matrix.platform == 'ios'
+        shell: bash
+        env:
+          IOS_CERT_P12_B64: ${{ secrets.IOS_CERT_P12_BASE64 }}
+          IOS_CERT_PASSWORD: ${{ secrets.IOS_CERT_PASSWORD }}
+          IOS_PROVISION_B64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          if [[ -n "${IOS_CERT_P12_B64:-}" && -n "${IOS_CERT_PASSWORD:-}" ]]; then
+            echo "::notice::iOS signing enabled (found secrets)"
+            echo "IOS_SIGNING_ENABLED=true" >> $GITHUB_ENV
+            
+            # Create keychain
+            security create-keychain -p actions temp.keychain
+            security default-keychain -s temp.keychain
+            security unlock-keychain -p actions temp.keychain
+            security set-keychain-settings -t 3600 -u temp.keychain
+            
+            # Import certificate
+            echo "$IOS_CERT_P12_B64" | base64 --decode > cert.p12
+            security import cert.p12 -k temp.keychain -P "$IOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+            security set-key-partition-list -S apple-tool:,apple: -s -k actions temp.keychain
+            rm cert.p12
+            
+            # Install provisioning profile if provided
+            if [[ -n "${IOS_PROVISION_B64:-}" ]]; then
+              mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+              echo "$IOS_PROVISION_B64" | base64 --decode > ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision
+            fi
+          else
+            echo "::notice::iOS signing disabled (no secrets found, will build unsigned)"
+            echo "IOS_SIGNING_ENABLED=false" >> $GITHUB_ENV
+          fi
+
+      - name: build ios (strict)
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          if [[ "$IOS_SIGNING_ENABLED" == "true" ]]; then
+            flutter build ios --release --no-pub
+          else
+            flutter build ios --release --no-codesign --no-pub
+          fi
+
+      - name: create ios ipa (strict)
+        if: matrix.platform == 'ios'
+        shell: bash
+        run: |
+          mkdir -p dist
+          cd ios
+          
+          if [[ "$IOS_SIGNING_ENABLED" == "true" ]]; then
+            # Archive with signing
+            xcodebuild -workspace Runner.xcworkspace -scheme Runner \
+              -sdk iphoneos -configuration Release archive \
+              -archivePath build/Runner.xcarchive \
+              CODE_SIGNING_ALLOWED=YES
+            
+            # Export IPA
+            cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>ad-hoc</string>
+              <key>teamID</key>
+              <string>TEAM_ID_PLACEHOLDER</string>
+              <key>compileBitcode</key>
+              <false/>
+          </dict>
+          </plist>
+          EOF
+            
+            xcodebuild -exportArchive \
+              -archivePath build/Runner.xcarchive \
+              -exportPath build/ipa \
+              -exportOptionsPlist ExportOptions.plist
+            
+            test -f build/ipa/Runner.ipa
+            cp build/ipa/Runner.ipa "${GITHUB_WORKSPACE}/dist/${BUILD_TAG}-ios-adhoc-release.ipa"
+          else
+            # Unsigned - create unsigned IPA using xcrun
+            test -d ../build/ios/iphoneos/Runner.app
+            
+            # Create Payload directory structure for IPA
+            mkdir -p Payload
+            cp -r ../build/ios/iphoneos/Runner.app Payload/
+            
+            # Create IPA (IPA is just a renamed zip with specific structure)
+            cd ..
+            ditto -c -k --sequesterRsrc --keepParent ios/Payload "${GITHUB_WORKSPACE}/dist/${BUILD_TAG}-ios-unsigned-release.ipa"
+            
+            # Verify IPA was created
+            test -f "${GITHUB_WORKSPACE}/dist/${BUILD_TAG}-ios-unsigned-release.ipa"
+          fi
+
+      - name: ios signing cleanup
+        if: matrix.platform == 'ios' && always()
+        shell: bash
+        run: |
+          security delete-keychain temp.keychain 2>/dev/null || true
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build.mobileprovision 2>/dev/null || true
+
+      # ================= macOS =================
+      - name: macos signing setup (optional)
+        if: matrix.platform == 'macos'
+        shell: bash
+        env:
+          MACOS_CERT_P12_B64: ${{ secrets.MACOS_CERT_P12_BASE64 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          if [[ -n "${MACOS_CERT_P12_B64:-}" && -n "${MACOS_CERT_PASSWORD:-}" ]]; then
+            echo "::notice::macOS signing enabled (found secrets)"
+            echo "MACOS_SIGNING_ENABLED=true" >> $GITHUB_ENV
+            
+            # Create keychain
+            security create-keychain -p actions temp.keychain
+            security default-keychain -s temp.keychain
+            security unlock-keychain -p actions temp.keychain
+            security set-keychain-settings -t 3600 -u temp.keychain
+            
+            # Import certificate
+            echo "$MACOS_CERT_P12_B64" | base64 --decode > cert.p12
+            security import cert.p12 -k temp.keychain -P "$MACOS_CERT_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+            security set-key-partition-list -S apple-tool:,apple: -s -k actions temp.keychain
+            rm cert.p12
+          else
+            echo "::notice::macOS signing disabled (no secrets found, will build unsigned)"
+            echo "MACOS_SIGNING_ENABLED=false" >> $GITHUB_ENV
+          fi
+
+      - name: build macos (strict)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: flutter build macos --release --no-pub
+
+      - name: sign macos app (optional)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          RELEASE_DIR="build/macos/Build/Products/Release"
+          APP_DIR="$(find "$RELEASE_DIR" -maxdepth 1 -name "*.app" -print -quit)"
+          
+          if [[ "$MACOS_SIGNING_ENABLED" == "true" ]]; then
+            echo "::notice::Signing macOS app with ad-hoc signature"
+            # Ad-hoc signing (free, no developer account needed)
+            codesign --force --deep --sign - "$APP_DIR"
+          else
+            echo "::notice::Skipping macOS signing (unsigned)"
+          fi
+
+      - name: create macos dmg (strict)
+        if: matrix.platform == 'macos'
+        shell: bash
+        run: |
+          # Ensure create-dmg is installed
+          if ! command -v create-dmg &> /dev/null; then
+            echo "::error::create-dmg is not installed. Please install it manually: brew install create-dmg"
+            exit 1
+          fi
+          
+          mkdir -p dist
+          RELEASE_DIR="build/macos/Build/Products/Release"
+          test -d "$RELEASE_DIR"
+          APP_DIR="$(find "$RELEASE_DIR" -maxdepth 1 -name "*.app" -print -quit)"
+          test -n "$APP_DIR"
+
+          # Detect architecture
+          BIN=$(find "$APP_DIR/Contents/MacOS" -maxdepth 1 -type f -perm -111 -print -quit || true)
+          INFO=$(lipo -info "$BIN" 2>/dev/null || true)
+
+          if echo "$INFO" | grep -q "x86_64" && echo "$INFO" | grep -q "arm64"; then
+            ARCH="universal"
+          elif echo "$INFO" | grep -q "arm64"; then
+            ARCH="arm64"
+          elif echo "$INFO" | grep -q "x86_64"; then
+            ARCH="x64"
+          else
+            ARCH="unknown"
+          fi
+
+          cd "$RELEASE_DIR"
+          APP="$(ls -1d *.app | head -n 1)"
+          APP_NAME="${APP%.app}"
+          
+          SIGN_STATUS="unsigned"
+          if [[ "$MACOS_SIGNING_ENABLED" == "true" ]]; then
+            SIGN_STATUS="adhoc"
+          fi
+          
+          # Create DMG (no fallback)
+          DMG_NAME="${BUILD_TAG}-macos-${ARCH}-${SIGN_STATUS}-release.dmg"
+          create-dmg \
+            --volname "$APP_NAME" \
+            --window-pos 200 120 \
+            --window-size 800 400 \
+            --icon-size 100 \
+            --app-drop-link 600 185 \
+            --no-internet-enable \
+            "${GITHUB_WORKSPACE}/dist/${DMG_NAME}" \
+            "$APP"
+          
+          # Verify DMG was created
+          test -f "${GITHUB_WORKSPACE}/dist/${DMG_NAME}"
+
+      - name: macos signing cleanup
+        if: matrix.platform == 'macos' && always()
+        shell: bash
+        run: |
+          security delete-keychain temp.keychain 2>/dev/null || true
+
+      # ================= Windows =================
+      - name: build windows (strict)
+        if: matrix.platform == 'windows'
+        shell: cmd
+        run: |
+          flutter build windows --release --no-pub
+
+      - name: pack windows executables (strict)
+        if: matrix.platform == 'windows'
+        shell: cmd
+        run: |
+          if not exist dist mkdir dist
+          if not exist build\windows\x64\runner\Release (
+            echo ::error::Windows Release folder not found
+            exit /b 1
+          )
+          
+          REM Copy all files directly to dist folder with build tag prefix
+          xcopy "build\windows\x64\runner\Release\*" "dist\windows-release\" /E /I /Y
+          
+          REM Verify main executable exists
+          if not exist "dist\windows-release\*.exe" (
+            echo ::error::No executable found in Windows Release
+            exit /b 1
+          )
+          
+          echo Windows executables copied to dist/windows-release/
+
+      - name: upload
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.platform }}
+          if-no-files-found: warn
+          retention-days: 3
+          path: dist/*
+
+  # -------------------------
+  # CLEANUP (workspace nuke + system cleanup)
+  # -------------------------
+  cleanup:
+    name: cleanup
+    needs: build
+    if: always() && github.event_name != 'pull_request'
+    runs-on: ${{ fromJSON(matrix.runs_on) }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos
+            runs_on: '["self-hosted","macOS","X64"]'
+          - os: windows
+            runs_on: '["self-hosted","Windows","X64"]'
+
+    steps:
+      - name: cleanup macos (enhanced)
+        if: runner.os != 'Windows'
+        continue-on-error: true
+        shell: bash
+        run: |
+          set +e
+          
+          echo "::group::Cleaning workspace directories"
+          rm -rf "$GITHUB_WORKSPACE/dist" \
+                 "$GITHUB_WORKSPACE/build" \
+                 "$GITHUB_WORKSPACE/.dart_tool" \
+                 "$GITHUB_WORKSPACE/.pub-cache" \
+                 "$GITHUB_WORKSPACE/.gradle" \
+                 "$GITHUB_WORKSPACE/ios/Pods" \
+                 "$GITHUB_WORKSPACE/ios/.symlinks" \
+                 "$GITHUB_WORKSPACE/macos/Pods" \
+                 "$GITHUB_WORKSPACE/macos/.symlinks" 2>/dev/null || true
+          echo "::endgroup::"
+          
+          echo "::group::Running flutter clean"
+          if command -v flutter &> /dev/null; then
+            cd "$GITHUB_WORKSPACE" 2>/dev/null && flutter clean || echo "::warning::flutter clean failed"
+          fi
+          echo "::endgroup::"
+          
+          echo "::group::Cleaning keychains"
+          security delete-keychain temp.keychain 2>/dev/null || true
+          security list-keychains 2>/dev/null | tr -d '"' | grep -i temp | while read kc; do
+            security delete-keychain "$kc" 2>/dev/null || true
+          done
+          security default-keychain -s login.keychain 2>/dev/null || true
+          echo "::endgroup::"
+          
+          echo "::group::Cleaning provisioning profiles"
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/build*.mobileprovision 2>/dev/null || true
+          echo "::endgroup::"
+          
+          echo "::group::Cleaning certificates"
+          rm -f "$GITHUB_WORKSPACE"/*.p12 2>/dev/null || true
+          rm -f "$GITHUB_WORKSPACE"/ios/*.p12 2>/dev/null || true
+          rm -f "$GITHUB_WORKSPACE"/macos/*.p12 2>/dev/null || true
+          rm -f "$GITHUB_WORKSPACE"/cert.p12 2>/dev/null || true
+          echo "::endgroup::"
+          
+          echo "✅ macOS cleanup completed"
+
+      - name: cleanup windows (enhanced)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: cmd
+        run: |
+          echo ::group::Cleaning workspace directories
+          if exist "%GITHUB_WORKSPACE%\dist" rmdir /s /q "%GITHUB_WORKSPACE%\dist" 2>nul
+          if exist "%GITHUB_WORKSPACE%\build" rmdir /s /q "%GITHUB_WORKSPACE%\build" 2>nul
+          if exist "%GITHUB_WORKSPACE%\.dart_tool" rmdir /s /q "%GITHUB_WORKSPACE%\.dart_tool" 2>nul
+          if exist "%GITHUB_WORKSPACE%\.pub-cache" rmdir /s /q "%GITHUB_WORKSPACE%\.pub-cache" 2>nul
+          if exist "%GITHUB_WORKSPACE%\.gradle" rmdir /s /q "%GITHUB_WORKSPACE%\.gradle" 2>nul
+          echo ::endgroup::
+          
+          echo ::group::Running flutter clean
+          cd /d "%GITHUB_WORKSPACE%" 2>nul && flutter clean 2>nul
+          if errorlevel 1 echo ::warning::flutter clean failed
+          echo ::endgroup::
+          
+          echo ::group::Cleaning temp directories
+          for /d %%i in ("%TEMP%\flutter_*") do rmdir /s /q "%%i" 2>nul
+          for /d %%i in ("%TEMP%\dart_*") do rmdir /s /q "%%i" 2>nul
+          echo ::endgroup::
+          
+          echo ✅ Windows cleanup completed
+
+  # -------------------------
+  # RELEASE (only on tag push)
+  # -------------------------
+  release:
+    name: Create GitHub Release
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Get version from tag
+        id: get_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TAG_NAME=$TAG_NAME" >> $GITHUB_OUTPUT
+          
+          # Detect pre-release
+          if [[ "$VERSION" =~ (beta|alpha|rc) ]]; then
+            echo "IS_PRERELEASE=true" >> $GITHUB_OUTPUT
+          else
+            echo "IS_PRERELEASE=false" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG=$(git describe --abbrev=0 --tags $(git rev-list --tags --skip=1 --max-count=1) 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            echo "## 🎉 Initial Release" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "First release of Yet Another Wake on LAN!" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          else
+            echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+            echo "## 📝 Changes since $PREV_TAG" >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            git log $PREV_TAG..HEAD --pretty=format:"- %s (%h)" --no-merges >> $GITHUB_OUTPUT
+            echo "" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      
+      - name: Display artifacts
+        run: ls -R artifacts
+      
+      - name: Prepare Windows archive
+        run: |
+          cd artifacts/dist-windows/windows-release
+          zip -r ../../../windows-release.zip *
+          cd ../../..
+      
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.get_version.outputs.TAG_NAME }}
+          name: Release ${{ steps.get_version.outputs.VERSION }}
+          body: |
+            ${{ steps.changelog.outputs.CHANGELOG }}
+            
+            ---
+            
+            ## 📦 Downloads
+            
+            ### Android
+            - **APK**: Direct install on Android devices
+            - **AAB**: For Google Play Store upload
+            
+            ### iOS
+            - **IPA (Unsigned)**: Requires sideloading via [AltStore](https://altstore.io/)
+            
+            ### macOS
+            - **DMG**: Drag & drop to Applications folder
+            - First launch: Right-click → Open to bypass Gatekeeper
+            
+            ### Windows
+            - **ZIP**: Extract and run executable
+            - May show Windows Defender warning → "More info" → "Run anyway"
+            
+            ---
+            
+            ## 🔒 Security Notes
+            
+            - Android builds are signed with release keystore
+            - iOS builds are unsigned (free distribution)
+            - macOS builds use ad-hoc signing
+            - Windows builds are unsigned
+          draft: false
+          prerelease: ${{ steps.get_version.outputs.IS_PRERELEASE }}
+          files: |
+            artifacts/dist-android/*.apk
+            artifacts/dist-android/*.aab
+            artifacts/dist-ios/*.ipa
+            artifacts/dist-macos/*.dmg
+            windows-release.zip
+          fail_on_unmatched_files: true
